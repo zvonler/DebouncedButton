@@ -119,5 +119,11 @@ DebouncedButton::describe_input(Input input) const
     // Unreachable
 }
 
+bool
+DebouncedButton::input_pending() const
+{
+    return _state != IDLE && _state != PRESSED;
+}
+
 /*-------------------------------------------------------------------------*/
 

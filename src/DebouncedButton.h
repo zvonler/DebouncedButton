@@ -102,6 +102,12 @@ public:
     bool state() const { return _debounced_reading == _pressed_state; }
 
     /**
+     * Returns true if the button has had some kind of activity that will
+     * cause an Input to be delivered if no other reading changes occur.
+     */
+    bool input_pending() const;
+
+    /**
      * Returns the number of milliseconds between tm and the last change in
      * the debounced state, or 0 if tm is earlier than the last change time.
      */

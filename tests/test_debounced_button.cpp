@@ -37,11 +37,13 @@ public:
         uint32_t _tm;
         bool _button_state;
         Input _expected_input;
+        bool _expected_pending;
 
-        ScriptPoint(uint32_t tm, bool button_state, Input expected_input = DebouncedButton::NONE)
+        ScriptPoint(uint32_t tm, bool button_state, Input expected_input = DebouncedButton::NONE, bool expected_pending = false)
             : _tm(tm)
             , _button_state(button_state)
             , _expected_input(expected_input)
+            , _expected_pending(expected_pending)
         { }
     };
 
@@ -64,6 +66,7 @@ public:
 
             SCOPED_TRACE(_name + " i:" + std::to_string(i));
             EXPECT_EQ(sp._expected_input, actual_input);
+            EXPECT_EQ(sp._expected_pending, button.input_pending());
         }
     }
 };
@@ -138,10 +141,10 @@ TEST_F(TestDebouncedButton, TestRapidPresses)
 
 TEST_F(TestDebouncedButton, TestSinglePressAndRelease)
 {
-    DebouncedButton button;
-
     // Test of a press shorter than CLICKED_CUTOFF_MS
     {
+        DebouncedButton button;
+
         uint32_t press_tm = 0;
         uint32_t release_tm = press_tm + button.CLICKED_CUTOFF_MS - 10;
         uint32_t clicked_tm = release_tm + button.DEBOUNCE_MS + button.DOUBLE_CLICK_TIMEOUT_MS + 1;
@@ -149,11 +152,11 @@ TEST_F(TestDebouncedButton, TestSinglePressAndRelease)
         ScriptPoint click_script[] = {
             // Button pressed and held for debounce timeout
             { press_tm, true },
-            { press_tm + button.DEBOUNCE_MS, true },
+            { press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released just before click timeout and left released for debounce timeout
             // No click should be delivered before the double click timeout
-            { release_tm, false },
-            { release_tm + button.DEBOUNCE_MS, false },
+            { release_tm, false, DebouncedButton::NONE, true },
+            { release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             // Click should be delivered after the double click timeout
             { clicked_tm, false, DebouncedButton::CLICK },
         };
@@ -163,13 +166,15 @@ TEST_F(TestDebouncedButton, TestSinglePressAndRelease)
 
     // Test of a press longer than CLICKED_CUTOFF_MS
     {
+        DebouncedButton button;
+
         uint32_t press_tm = 0;
         uint32_t release_tm = press_tm + button.DEBOUNCE_MS + button.CLICKED_CUTOFF_MS + 10;
 
         ScriptPoint hold_script[] = {
             // Button pressed and held for debounce timeout
             { press_tm, true },
-            { press_tm + button.DEBOUNCE_MS, true },
+            { press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button still pressed just before release time should get held input
             { release_tm - 1, true, DebouncedButton::LONG_PRESS },
             // Button released just after click timeout and left released for debounce timeout
@@ -185,10 +190,10 @@ TEST_F(TestDebouncedButton, TestSinglePressAndRelease)
 
 TEST_F(TestDebouncedButton, TestDoublePressAndRelease)
 {
-    DebouncedButton button;
-
     // Two clicks within the double click timeout
     {
+        DebouncedButton button;
+
         uint32_t first_press_tm = 0;
         uint32_t first_release_tm = first_press_tm + button.DEBOUNCE_MS + button.CLICKED_CUTOFF_MS - 10;
 
@@ -200,16 +205,16 @@ TEST_F(TestDebouncedButton, TestDoublePressAndRelease)
         ScriptPoint double_click_script[] = {
             // Button pressed and held for debounce timeout
             { first_press_tm, true },
-            { first_press_tm + button.DEBOUNCE_MS, true },
+            { first_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { first_release_tm, false },
-            { first_release_tm + button.DEBOUNCE_MS, false },
+            { first_release_tm, false, DebouncedButton::NONE, true },
+            { first_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             // Button pressed again and held for debounce timeout
-            { second_press_tm, true },
-            { second_press_tm + button.DEBOUNCE_MS, true },
+            { second_press_tm, true, DebouncedButton::NONE, true },
+            { second_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { second_release_tm, false },
-            { second_release_tm + button.DEBOUNCE_MS, false },
+            { second_release_tm, false, DebouncedButton::NONE, true },
+            { second_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             // Nothing else for click cutoff should trigger double click event
             { double_clicked_tm, false, DebouncedButton::DOUBLE_CLICK }
         };
@@ -219,6 +224,8 @@ TEST_F(TestDebouncedButton, TestDoublePressAndRelease)
 
     // Two clicks separated by more than the double click timeout
     {
+        DebouncedButton button;
+
         uint32_t first_press_tm = 0;
         uint32_t first_release_tm = first_press_tm + button.DEBOUNCE_MS + button.CLICKED_CUTOFF_MS - 10;
         uint32_t first_clicked_tm = first_release_tm + button.DEBOUNCE_MS + button.CLICKED_CUTOFF_MS + 1;
@@ -230,19 +237,19 @@ TEST_F(TestDebouncedButton, TestDoublePressAndRelease)
         ScriptPoint two_clicks_script[] = {
             // Button pressed and held for debounce timeout
             { first_press_tm, true },
-            { first_press_tm + button.DEBOUNCE_MS, true },
+            { first_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { first_release_tm, false },
-            { first_release_tm + button.DEBOUNCE_MS, false },
+            { first_release_tm, false, DebouncedButton::NONE, true },
+            { first_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             // TODO: See if this and the next ScriptPoint can be combined
             // into { second_press_tm, true, DebouncedButton::CLICK }.
             { first_clicked_tm, false, DebouncedButton::CLICK },
             // Button pressed again and held for debounce timeout
             { second_press_tm, true },
-            { second_press_tm + button.DEBOUNCE_MS, true },
+            { second_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { second_release_tm, false },
-            { second_release_tm + button.DEBOUNCE_MS, false },
+            { second_release_tm, false, DebouncedButton::NONE, true },
+            { second_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             // Nothing else for click cutoff should trigger double click event
             { second_clicked_tm, false, DebouncedButton::CLICK }
         };
@@ -252,6 +259,8 @@ TEST_F(TestDebouncedButton, TestDoublePressAndRelease)
 
     // A long press followed by a click
     {
+        DebouncedButton button;
+
         uint32_t first_press_tm = 0;
         uint32_t first_release_tm = first_press_tm + button.DEBOUNCE_MS + button.CLICKED_CUTOFF_MS + 10;
 
@@ -263,17 +272,17 @@ TEST_F(TestDebouncedButton, TestDoublePressAndRelease)
         ScriptPoint press_click_script[] = {
             // Button pressed and held for debounce timeout
             { first_press_tm, true },
-            { first_press_tm + button.DEBOUNCE_MS, true },
+            { first_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             { first_release_tm - 1, true, DebouncedButton::LONG_PRESS },
             // Button released after click cutoff
             { first_release_tm, false },
             { first_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::RELEASE },
             // Button pressed again and held for debounce timeout
             { second_press_tm, true },
-            { second_press_tm + button.DEBOUNCE_MS, true },
+            { second_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { second_release_tm, false },
-            { second_release_tm + button.DEBOUNCE_MS, false },
+            { second_release_tm, false, DebouncedButton::NONE, true },
+            { second_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             // Nothing else for click cutoff should trigger double click event
             { double_clicked_tm, false, DebouncedButton::CLICK }
         };
@@ -283,6 +292,8 @@ TEST_F(TestDebouncedButton, TestDoublePressAndRelease)
 
     // A click followed by a long press
     {
+        DebouncedButton button;
+
         uint32_t first_press_tm = 0;
         uint32_t first_release_tm = first_press_tm + button.DEBOUNCE_MS + button.CLICKED_CUTOFF_MS - 10;
 
@@ -294,13 +305,13 @@ TEST_F(TestDebouncedButton, TestDoublePressAndRelease)
         ScriptPoint click_press_script[] = {
             // Button pressed and held for debounce timeout
             { first_press_tm, true },
-            { first_press_tm + button.DEBOUNCE_MS, true },
+            { first_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { first_release_tm, false },
-            { first_release_tm + button.DEBOUNCE_MS, false },
+            { first_release_tm, false, DebouncedButton::NONE, true },
+            { first_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             // Button pressed again and held for debounce timeout
-            { second_press_tm, true },
-            { second_press_tm + button.DEBOUNCE_MS, true },
+            { second_press_tm, true, DebouncedButton::NONE, true },
+            { second_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button held past click cutoff
             { second_release_tm - 1, true, DebouncedButton::CLICK_AND_LONG_PRESS },
             // And released
@@ -333,24 +344,24 @@ TEST_F(TestDebouncedButton, TestTriplePressAndRelease)
         ScriptPoint three_clicks_script[] = {
             // Button pressed and held for debounce timeout
             { first_press_tm, true },
-            { first_press_tm + button.DEBOUNCE_MS, true },
+            { first_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { first_release_tm, false },
-            { first_release_tm + button.DEBOUNCE_MS, false },
+            { first_release_tm, false, DebouncedButton::NONE, true },
+            { first_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             { first_clicked_tm, false, DebouncedButton::CLICK },
             // Button pressed again and held for debounce timeout
             { second_press_tm, true },
-            { second_press_tm + button.DEBOUNCE_MS, true },
+            { second_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { second_release_tm, false },
-            { second_release_tm + button.DEBOUNCE_MS, false },
+            { second_release_tm, false, DebouncedButton::NONE, true },
+            { second_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             { second_clicked_tm, false, DebouncedButton::CLICK },
             // Button pressed again and held for debounce timeout
             { third_press_tm, true },
-            { third_press_tm + button.DEBOUNCE_MS, true },
+            { third_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { third_release_tm, false },
-            { third_release_tm + button.DEBOUNCE_MS, false },
+            { third_release_tm, false, DebouncedButton::NONE, true },
+            { third_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             { third_clicked_tm, false, DebouncedButton::CLICK },
         };
 
@@ -376,23 +387,23 @@ TEST_F(TestDebouncedButton, TestTriplePressAndRelease)
         ScriptPoint double_plus_click_script[] = {
             // Button pressed and held for debounce timeout
             { first_press_tm, true },
-            { first_press_tm + button.DEBOUNCE_MS, true },
+            { first_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { first_release_tm, false },
-            { first_release_tm + button.DEBOUNCE_MS, false },
+            { first_release_tm, false, DebouncedButton::NONE, true },
+            { first_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             // Button pressed again and held for debounce timeout
-            { second_press_tm, true },
-            { second_press_tm + button.DEBOUNCE_MS, true },
+            { second_press_tm, true, DebouncedButton::NONE, true },
+            { second_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { second_release_tm, false },
-            { second_release_tm + button.DEBOUNCE_MS, false },
+            { second_release_tm, false, DebouncedButton::NONE, true },
+            { second_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             { double_click_tm, false, DebouncedButton::DOUBLE_CLICK },
             // Button pressed again and held for debounce timeout
             { third_press_tm, true },
-            { third_press_tm + button.DEBOUNCE_MS, true },
+            { third_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { third_release_tm, false },
-            { third_release_tm + button.DEBOUNCE_MS, false },
+            { third_release_tm, false, DebouncedButton::NONE, true },
+            { third_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             { third_clicked_tm, false, DebouncedButton::CLICK },
         };
 
@@ -418,23 +429,23 @@ TEST_F(TestDebouncedButton, TestTriplePressAndRelease)
         ScriptPoint click_plus_double_script[] = {
             // Button pressed and held for debounce timeout
             { first_press_tm, true },
-            { first_press_tm + button.DEBOUNCE_MS, true },
+            { first_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { first_release_tm, false },
-            { first_release_tm + button.DEBOUNCE_MS, false },
+            { first_release_tm, false, DebouncedButton::NONE, true },
+            { first_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             { first_clicked_tm, false, DebouncedButton::CLICK },
             // Button pressed again and held for debounce timeout
             { second_press_tm, true },
-            { second_press_tm + button.DEBOUNCE_MS, true },
+            { second_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { second_release_tm, false },
-            { second_release_tm + button.DEBOUNCE_MS, false },
+            { second_release_tm, false, DebouncedButton::NONE, true },
+            { second_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             // Button pressed again and held for debounce timeout
-            { third_press_tm, true },
-            { third_press_tm + button.DEBOUNCE_MS, true },
+            { third_press_tm, true, DebouncedButton::NONE, true },
+            { third_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { third_release_tm, false },
-            { third_release_tm + button.DEBOUNCE_MS, false },
+            { third_release_tm, false, DebouncedButton::NONE, true },
+            { third_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             { double_click_tm, false, DebouncedButton::DOUBLE_CLICK },
         };
 
@@ -460,20 +471,20 @@ TEST_F(TestDebouncedButton, TestTriplePressAndRelease)
         ScriptPoint double_plus_press_script[] = {
             // Button pressed and held for debounce timeout
             { first_press_tm, true },
-            { first_press_tm + button.DEBOUNCE_MS, true },
+            { first_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { first_release_tm, false },
-            { first_release_tm + button.DEBOUNCE_MS, false },
+            { first_release_tm, false, DebouncedButton::NONE, true },
+            { first_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             // Button pressed again and held for debounce timeout
-            { second_press_tm, true },
-            { second_press_tm + button.DEBOUNCE_MS, true },
+            { second_press_tm, true, DebouncedButton::NONE, true },
+            { second_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { second_release_tm, false },
-            { second_release_tm + button.DEBOUNCE_MS, false },
+            { second_release_tm, false, DebouncedButton::NONE, true },
+            { second_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             { double_click_tm, false, DebouncedButton::DOUBLE_CLICK },
             // Button pressed again and held for debounce timeout
             { third_press_tm, true },
-            { third_press_tm + button.DEBOUNCE_MS, true },
+            { third_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             { third_release_tm - 1, true, DebouncedButton::LONG_PRESS },
             // Button released after click cutoff
             { third_release_tm, false },
@@ -501,23 +512,23 @@ TEST_F(TestDebouncedButton, TestTriplePressAndRelease)
         ScriptPoint press_plus_double_script[] = {
             // Button pressed and held for debounce timeout
             { first_press_tm, true },
-            { first_press_tm + button.DEBOUNCE_MS, true },
+            { first_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             { first_release_tm - 1, true, DebouncedButton::LONG_PRESS },
             // Button released after click cutoff
             { first_release_tm, false },
             { first_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::RELEASE },
             // Button pressed again and held for debounce timeout
             { second_press_tm, true },
-            { second_press_tm + button.DEBOUNCE_MS, true },
+            { second_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { second_release_tm, false },
-            { second_release_tm + button.DEBOUNCE_MS, false },
+            { second_release_tm, false, DebouncedButton::NONE, true },
+            { second_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             // Button pressed again and held for debounce timeout
-            { third_press_tm, true },
-            { third_press_tm + button.DEBOUNCE_MS, true },
+            { third_press_tm, true, DebouncedButton::NONE, true },
+            { third_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { third_release_tm, false },
-            { third_release_tm + button.DEBOUNCE_MS, false },
+            { third_release_tm, false, DebouncedButton::NONE, true },
+            { third_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             { double_click_tm, false, DebouncedButton::DOUBLE_CLICK },
         };
 
@@ -542,24 +553,24 @@ TEST_F(TestDebouncedButton, TestTriplePressAndRelease)
         ScriptPoint press_plus_two_script[] = {
             // Button pressed and held for debounce timeout
             { first_press_tm, true },
-            { first_press_tm + button.DEBOUNCE_MS, true },
+            { first_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             { first_release_tm - 1, true, DebouncedButton::LONG_PRESS },
             // Button released after click cutoff
             { first_release_tm, false },
             { first_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::RELEASE },
             // Button pressed again and held for debounce timeout
             { second_press_tm, true },
-            { second_press_tm + button.DEBOUNCE_MS, true },
+            { second_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { second_release_tm, false },
-            { second_release_tm + button.DEBOUNCE_MS, false },
+            { second_release_tm, false, DebouncedButton::NONE, true },
+            { second_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             { second_click_tm, false, DebouncedButton::CLICK },
             // Button pressed again and held for debounce timeout
             { third_press_tm, true },
-            { third_press_tm + button.DEBOUNCE_MS, true },
+            { third_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { third_release_tm, false },
-            { third_release_tm + button.DEBOUNCE_MS, false },
+            { third_release_tm, false, DebouncedButton::NONE, true },
+            { third_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             { third_click_tm, false, DebouncedButton::CLICK },
         };
 
@@ -584,21 +595,21 @@ TEST_F(TestDebouncedButton, TestTriplePressAndRelease)
         ScriptPoint two_plus_press_script[] = {
             // Button pressed and held for debounce timeout
             { first_press_tm, true },
-            { first_press_tm + button.DEBOUNCE_MS, true },
+            { first_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { first_release_tm, false },
-            { first_release_tm + button.DEBOUNCE_MS, false },
+            { first_release_tm, false, DebouncedButton::NONE, true },
+            { first_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             { first_click_tm, false, DebouncedButton::CLICK },
             // Button pressed again and held for debounce timeout
             { second_press_tm, true },
-            { second_press_tm + button.DEBOUNCE_MS, true },
+            { second_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { second_release_tm, false },
-            { second_release_tm + button.DEBOUNCE_MS, false },
+            { second_release_tm, false, DebouncedButton::NONE, true },
+            { second_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             { second_click_tm, false, DebouncedButton::CLICK },
             // Button pressed again and held for debounce timeout
             { third_press_tm, true },
-            { third_press_tm + button.DEBOUNCE_MS, true },
+            { third_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             { third_release_tm - 1, true, DebouncedButton::LONG_PRESS },
             // Button released after click cutoff
             { third_release_tm, false },
@@ -626,24 +637,24 @@ TEST_F(TestDebouncedButton, TestTriplePressAndRelease)
         ScriptPoint click_press_click_script[] = {
             // Button pressed and held for debounce timeout
             { first_press_tm, true },
-            { first_press_tm + button.DEBOUNCE_MS, true },
+            { first_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { first_release_tm, false },
-            { first_release_tm + button.DEBOUNCE_MS, false },
+            { first_release_tm, false, DebouncedButton::NONE, true },
+            { first_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             { first_clicked_tm, false, DebouncedButton::CLICK },
             // Button pressed again and held for debounce timeout
             { second_press_tm, true },
-            { second_press_tm + button.DEBOUNCE_MS, true },
+            { second_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             { second_release_tm - 1, true, DebouncedButton::LONG_PRESS },
             // Button released after click cutoff
             { second_release_tm, false },
             { second_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::RELEASE },
             // Button pressed again and held for debounce timeout
             { third_press_tm, true },
-            { third_press_tm + button.DEBOUNCE_MS, true },
+            { third_press_tm + button.DEBOUNCE_MS, true, DebouncedButton::NONE, true },
             // Button released before click cutoff
-            { third_release_tm, false },
-            { third_release_tm + button.DEBOUNCE_MS, false },
+            { third_release_tm, false, DebouncedButton::NONE, true },
+            { third_release_tm + button.DEBOUNCE_MS, false, DebouncedButton::NONE, true },
             { third_clicked_tm, false, DebouncedButton::CLICK },
         };
 
